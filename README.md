@@ -91,4 +91,16 @@ Future repositories and services should always obtain the tenant with `TenantCon
 
 Roles are `ADMIN`, `MANAGER`, and `OPERATOR`. All user queries and mutations include the tenant ID from the signed JWT. DTO validation rejects unknown fields, including caller-supplied `tenantId` values.
 
-Beekeeping business modules remain outside this foundation.
+## Core beekeeping API
+
+Authenticated CRUD endpoints are available at:
+
+- `/api/v1/apiaries`
+- `/api/v1/hives`
+- `/api/v1/production-cycles`
+
+`ADMIN` and `MANAGER` can create, update, and delete records. `OPERATOR` can read records. All queries and relationships are scoped to the tenant from the signed JWT.
+
+Hives support `GET /api/v1/hives?apiaryId=<uuid>&status=<status>`. Colony statuses are `STRONG`, `MODERATE`, `WEAK`, and `INACTIVE`; queen statuses are `PRESENT`, `ABSENT`, and `UNKNOWN`.
+
+Production cycle statuses are `PLANNED`, `ACTIVE`, `COMPLETED`, and `CANCELLED`. Completed cycles require an end date and actual production, and a hive can have only one active cycle.
