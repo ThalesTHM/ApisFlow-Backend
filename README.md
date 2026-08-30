@@ -12,6 +12,15 @@ Business modules are intentionally not included yet.
 
 ## Local setup
 
+With GNU Make:
+
+```bash
+make setup
+make dev
+```
+
+Without Make:
+
 ```bash
 npm install
 cp .env.example .env
@@ -29,7 +38,7 @@ The API is available at `http://localhost:3000/api/v1`. Swagger UI is available 
 Create `.env` from `.env.example`, replace `JWT_SECRET`, then run:
 
 ```bash
-docker compose up --build
+make docker-up
 ```
 
 Compose runs pending Prisma migrations in a one-shot container, then starts the production-only API image after PostgreSQL and Redis are healthy.
@@ -70,4 +79,15 @@ The shared-schema strategy uses a `tenantId` foreign key on tenant-owned records
 
 Future repositories and services should always obtain the tenant with `TenantContextService.requireTenantId()` and include it in every tenant-owned Prisma query. Do not accept tenant identity from request headers or request bodies.
 
-Authentication endpoints and beekeeping business modules are the next application layer and are outside this foundation.
+## Authentication and users
+
+- `POST /api/v1/auth/register` creates a tenant and its initial `ADMIN` user.
+- `POST /api/v1/auth/login` authenticates with `tenantSlug`, email, and password.
+- `GET /api/v1/auth/me` returns the authenticated tenant-scoped user.
+- `POST /api/v1/users` creates a user (`ADMIN` only).
+- `GET /api/v1/users` and `GET /api/v1/users/:id` list/read users (`ADMIN` or `MANAGER`).
+- `PATCH /api/v1/users/:id` and `DELETE /api/v1/users/:id` modify users (`ADMIN` only).
+
+Roles are `ADMIN`, `MANAGER`, and `OPERATOR`. All user queries and mutations include the tenant ID from the signed JWT. DTO validation rejects unknown fields, including caller-supplied `tenantId` values.
+
+Beekeeping business modules remain outside this foundation.
