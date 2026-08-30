@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
+import { UserRole } from '@prisma/client';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AccessTokenPayload } from './auth.types';
 
@@ -15,7 +16,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: AccessTokenPayload): AccessTokenPayload {
-    if (!payload.sub || !payload.tenantId || !Array.isArray(payload.roles)) {
+    const validRoles = Object.values(UserRole);
+    if (
+      !payload.sub ||
+      !payload.tenantId ||
+      !Array.isArray(payload.roles) ||
+      !payload.roles.every((role) => validRoles.includes(role))
+    ) {
       throw new UnauthorizedException('Invalid access token');
     }
 

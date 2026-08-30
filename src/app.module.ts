@@ -11,6 +11,7 @@ import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './redis/redis.module';
 import { TenancyModule } from './tenancy/tenancy.module';
 import { TenantContextInterceptor } from './tenancy/tenant-context.interceptor';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { TenantContextInterceptor } from './tenancy/tenant-context.interceptor';
     RedisModule,
     AuthModule,
     TenancyModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [
