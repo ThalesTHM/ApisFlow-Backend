@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup check-env install infra dev docker-up down restart logs ps \
-	build lint test test-e2e check prisma-generate migrate migrate-deploy studio clean
+	build lint test test-e2e test-integration check prisma-generate migrate migrate-deploy seed studio clean
 
 help: ## Show available commands
 	@echo Honey Manager Backend
@@ -11,8 +11,10 @@ help: ## Show available commands
 	@echo   make docker-up       Build and run the full stack
 	@echo   make down            Stop the Docker stack
 	@echo   make check           Run lint, build, and tests
+	@echo   make test-integration Run tests against disposable PostgreSQL
 	@echo   make migrate         Create/apply a development migration
 	@echo   make migrate-deploy  Apply committed migrations
+	@echo   make seed            Load realistic demo data
 	@echo   make studio          Open Prisma Studio
 	@echo   make logs            Follow Docker logs
 
@@ -56,7 +58,10 @@ test: ## Run unit tests
 test-e2e: ## Run end-to-end tests
 	npm run test:e2e -- --runInBand
 
-check: lint build test test-e2e ## Run all code checks
+test-integration: ## Run database-backed integration tests
+	npm run test:integration
+
+check: lint build test test-e2e test-integration ## Run all code checks
 
 prisma-generate: ## Generate Prisma Client
 	npm run prisma:generate
@@ -66,6 +71,9 @@ migrate: ## Create and apply a development migration
 
 migrate-deploy: ## Apply committed migrations
 	npm run prisma:deploy
+
+seed: ## Load deterministic demo data
+	npm run prisma:seed
 
 studio: ## Open Prisma Studio
 	npm run prisma:studio

@@ -18,11 +18,19 @@ import { TenancyModule } from './tenancy/tenancy.module';
 import { TenantContextInterceptor } from './tenancy/tenant-context.interceptor';
 import { UsersModule } from './users/users.module';
 
+const environment = process.env.NODE_ENV ?? 'development';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
+      envFilePath: [
+        `.env.${environment}.local`,
+        `.env.${environment}`,
+        '.env.local',
+        '.env',
+      ],
       validationSchema: environmentValidationSchema,
     }),
     DatabaseModule,
