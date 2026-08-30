@@ -18,7 +18,7 @@ ENV NODE_ENV=production
 
 COPY package*.json ./
 COPY prisma ./prisma
-RUN npm ci --omit=dev --omit=optional
+RUN npm ci --omit=dev --omit=optional --ignore-scripts
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma

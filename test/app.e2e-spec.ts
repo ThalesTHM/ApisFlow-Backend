@@ -37,4 +37,22 @@ describe('AppController (e2e)', () => {
         expect(health.timestamp).toEqual(expect.any(String));
       });
   });
+
+  it('rejects tenantId supplied during registration', () => {
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        tenantName: 'Tenant A',
+        tenantSlug: 'tenant-a',
+        name: 'Admin User',
+        email: 'admin@tenant.test',
+        password: 'secure-password',
+        tenantId: 'forged-tenant-id',
+      })
+      .expect(400);
+  });
+
+  it('requires authentication for user CRUD', () => {
+    return request(app.getHttpServer()).get('/api/v1/users').expect(401);
+  });
 });
