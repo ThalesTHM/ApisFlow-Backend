@@ -33,6 +33,23 @@ enum ProductionCycleStatus {
   CANCELLED
 }
 
+enum HoneyQuality {
+  STANDARD
+  PREMIUM
+}
+
+enum HoneyBatchStatus {
+  AVAILABLE
+  DEPLETED
+  BLOCKED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
 model Tenant {
   id               String            @id @default(uuid()) @db.Uuid
   name             String
@@ -43,6 +60,8 @@ model Tenant {
   apiaries         Apiary[]
   hives            Hive[]
   productionCycles ProductionCycle[]
+  honeyBatches     HoneyBatch[]
+  orders           Order[]
 
   @@map("tenants")
 }
@@ -116,8 +135,65 @@ model ProductionCycle {
   notes                 String?
   tenant                Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   hive                  Hive                  @relation(fields: [hiveId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  honeyBatches          HoneyBatch[]
 
+  @@unique([id, tenantId])
   @@index([tenantId, hiveId])
   @@index([tenantId, status])
   @@map("production_cycles")
+}
+
+model HoneyBatch {
+  id                  String           @id @default(uuid()) @db.Uuid
+  tenantId            String           @map("tenant_id") @db.Uuid
+  productionCycleId   String           @map("production_cycle_id") @db.Uuid
+  code                String
+  productionDate      DateTime         @map("production_date") @db.Date
+  quantityKg          Decimal          @map("quantity_kg") @db.Decimal(10, 2)
+  availableQuantityKg Decimal          @map("available_quantity_kg") @db.Decimal(10, 2)
+  quality             HoneyQuality
+  status              HoneyBatchStatus @default(AVAILABLE)
+  tenant              Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productionCycle     ProductionCycle  @relation(fields: [productionCycleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  orderItems          OrderItem[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@index([tenantId, productionCycleId])
+  @@index([tenantId, status])
+  @@map("honey_batches")
+}
+
+model Order {
+  id               String      @id @default(uuid()) @db.Uuid
+  tenantId         String      @map("tenant_id") @db.Uuid
+  customerName     String      @map("customer_name")
+  customerDocument String      @map("customer_document")
+  status           OrderStatus @default(PENDING)
+  total            Decimal     @db.Decimal(12, 2)
+  createdAt        DateTime    @default(now()) @map("created_at")
+  tenant           Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items            OrderItem[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @map("tenant_id") @db.Uuid
+  orderId      String     @map("order_id") @db.Uuid
+  honeyBatchId String     @map("honey_batch_id") @db.Uuid
+  quantityKg   Decimal    @map("quantity_kg") @db.Decimal(10, 2)
+  unitPrice    Decimal    @map("unit_price") @db.Decimal(10, 2)
+  subtotal     Decimal    @db.Decimal(12, 2)
+  order        Order      @relation(fields: [orderId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  honeyBatch   HoneyBatch @relation(fields: [honeyBatchId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([orderId, honeyBatchId])
+  @@index([tenantId, orderId])
+  @@index([tenantId, honeyBatchId])
+  @@map("order_items")
 }

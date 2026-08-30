@@ -10,6 +10,8 @@ import { RequestLoggingInterceptor } from './common/interceptors/request-logging
 import { environmentValidationSchema } from './config/environment.validation';
 import { DatabaseModule } from './database/database.module';
 import { HivesModule } from './hives/hives.module';
+import { HoneyBatchesModule } from './honey-batches/honey-batches.module';
+import { OrdersModule } from './orders/orders.module';
 import { ProductionCyclesModule } from './production-cycles/production-cycles.module';
 import { RedisModule } from './redis/redis.module';
 import { TenancyModule } from './tenancy/tenancy.module';
@@ -31,6 +33,8 @@ import { UsersModule } from './users/users.module';
     ApiariesModule,
     HivesModule,
     ProductionCyclesModule,
+    HoneyBatchesModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [

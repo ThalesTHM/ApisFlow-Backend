@@ -104,3 +104,12 @@ Authenticated CRUD endpoints are available at:
 Hives support `GET /api/v1/hives?apiaryId=<uuid>&status=<status>`. Colony statuses are `STRONG`, `MODERATE`, `WEAK`, and `INACTIVE`; queen statuses are `PRESENT`, `ABSENT`, and `UNKNOWN`.
 
 Production cycle statuses are `PLANNED`, `ACTIVE`, `COMPLETED`, and `CANCELLED`. Completed cycles require an end date and actual production, and a hive can have only one active cycle.
+
+## Production and commercial API
+
+- `/api/v1/honey-batches` provides tenant-scoped batch CRUD.
+- `POST /api/v1/orders` creates a pending order and calculates item subtotals and the total.
+- `GET /api/v1/orders` and `GET /api/v1/orders/:id` provide order listing and full batch-to-hive traceability.
+- `PATCH /api/v1/orders/:id/status` confirms or cancels a pending order.
+
+Honey quality values are `STANDARD` and `PREMIUM`. Batch statuses are `AVAILABLE`, `DEPLETED`, and `BLOCKED`; availability is managed by the API and cannot become negative. Order statuses are `PENDING`, `CONFIRMED`, and `CANCELLED`. Confirmation deducts every item in one serializable database transaction, and finalized orders cannot change status.
