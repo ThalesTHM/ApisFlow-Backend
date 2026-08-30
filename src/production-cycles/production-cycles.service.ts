@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ProductionCycle, ProductionCycleStatus } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { CreateProductionCycleDto } from './dto/create-production-cycle.dto';
 import { ProductionCycleFilterDto } from './dto/production-cycle-filter.dto';
@@ -23,6 +24,7 @@ export class ProductionCyclesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly redis: RedisService,
   ) {}
 
   async create(dto: CreateProductionCycleDto): Promise<ProductionCycle> {
@@ -37,7 +39,7 @@ export class ProductionCyclesService {
     this.validateCycle(values);
     await this.ensureSingleActiveCycle(dto.hiveId, tenantId, values.status);
 
-    return this.prisma.productionCycle.create({
+    const cycle = await this.prisma.productionCycle.create({
       data: {
         tenantId,
         hiveId: dto.hiveId,
@@ -49,6 +51,12 @@ export class ProductionCyclesService {
         notes: dto.notes,
       },
     });
+    await this.afterMutation(
+      tenantId,
+      cycle,
+      cycle.status === ProductionCycleStatus.COMPLETED,
+    );
+    return cycle;
   }
 
   findAll(filter: ProductionCycleFilterDto): Promise<ProductionCycle[]> {
@@ -106,7 +114,14 @@ export class ProductionCyclesService {
     if (result.count === 0) {
       throw new NotFoundException('Production cycle not found');
     }
-    return this.findOne(id);
+    const cycle = await this.findOne(id);
+    await this.afterMutation(
+      tenantId,
+      cycle,
+      current.status !== ProductionCycleStatus.COMPLETED &&
+        cycle.status === ProductionCycleStatus.COMPLETED,
+    );
+    return cycle;
   }
 
   async remove(id: string): Promise<{ deleted: true }> {
@@ -117,7 +132,27 @@ export class ProductionCyclesService {
     if (result.count === 0) {
       throw new NotFoundException('Production cycle not found');
     }
+    await this.redis.invalidateDashboard(tenantId);
     return { deleted: true };
+  }
+
+  private async afterMutation(
+    tenantId: string,
+    cycle: ProductionCycle,
+    publishCompletion: boolean,
+  ): Promise<void> {
+    const operations: Array<Promise<void>> = [
+      this.redis.invalidateDashboard(tenantId),
+    ];
+    if (publishCompletion) {
+      operations.push(
+        this.redis.publishDomainEvent('production.completed', tenantId, {
+          productionCycleId: cycle.id,
+          hiveId: cycle.hiveId,
+        }),
+      );
+    }
+    await Promise.all(operations);
   }
 
   private validateCycle(values: CycleValues): void {

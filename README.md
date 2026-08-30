@@ -113,3 +113,10 @@ Production cycle statuses are `PLANNED`, `ACTIVE`, `COMPLETED`, and `CANCELLED`.
 - `PATCH /api/v1/orders/:id/status` confirms or cancels a pending order.
 
 Honey quality values are `STANDARD` and `PREMIUM`. Batch statuses are `AVAILABLE`, `DEPLETED`, and `BLOCKED`; availability is managed by the API and cannot become negative. Order statuses are `PENDING`, `CONFIRMED`, and `CANCELLED`. Confirmation deducts every item in one serializable database transaction, and finalized orders cannot change status.
+
+## Dashboard and Redis
+
+- `GET /api/v1/dashboard/summary` returns tenant totals for apiaries, hives, active hives, active production cycles, available honey stock, and pending orders.
+- `GET /api/v1/dashboard/production?period=month` groups produced honey by `day`, `month`, or `year`.
+
+Dashboard responses are cached in Redis for 60 seconds with tenant-specific keys. Mutations invalidate the affected tenant's dashboard cache. Redis Pub/Sub channel `domain-events` receives `hive.created`, `production.completed`, `honey-batch.created`, and `order.confirmed` event envelopes. Redis failures are logged and do not fail database mutations or dashboard queries.

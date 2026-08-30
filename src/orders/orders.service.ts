@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { HoneyBatchStatus, OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
@@ -29,6 +30,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly redis: RedisService,
   ) {}
 
   async create(dto: CreateOrderDto) {
@@ -59,7 +61,7 @@ export class OrdersService {
       new Prisma.Decimal(0),
     );
 
-    return this.prisma.order.create({
+    const order = await this.prisma.order.create({
       data: {
         tenantId,
         customerName: dto.customerName,
@@ -80,6 +82,8 @@ export class OrdersService {
       },
       include: orderDetailInclude,
     });
+    await this.redis.invalidateDashboard(tenantId);
+    return order;
   }
 
   findAll() {
@@ -102,13 +106,13 @@ export class OrdersService {
     return order;
   }
 
-  updateStatus(id: string, dto: UpdateOrderStatusDto) {
+  async updateStatus(id: string, dto: UpdateOrderStatusDto) {
     const tenantId = this.tenantContext.requireTenantId();
     if (dto.status === OrderStatus.PENDING) {
       throw new BadRequestException('An order cannot return to pending');
     }
 
-    return this.prisma.$transaction(
+    const result = await this.prisma.$transaction(
       async (transaction) => {
         const order = await transaction.order.findFirst({
           where: { id, tenantId },
@@ -118,10 +122,13 @@ export class OrdersService {
           throw new NotFoundException('Order not found');
         }
         if (order.status === dto.status) {
-          return transaction.order.findFirstOrThrow({
-            where: { id, tenantId },
-            include: orderDetailInclude,
-          });
+          return {
+            order: await transaction.order.findFirstOrThrow({
+              where: { id, tenantId },
+              include: orderDetailInclude,
+            }),
+            statusChanged: false,
+          };
         }
         if (order.status !== OrderStatus.PENDING) {
           throw new ConflictException('A finalized order cannot change status');
@@ -139,13 +146,31 @@ export class OrdersService {
           await this.deductInventory(transaction, tenantId, order.items);
         }
 
-        return transaction.order.findFirstOrThrow({
-          where: { id, tenantId },
-          include: orderDetailInclude,
-        });
+        return {
+          order: await transaction.order.findFirstOrThrow({
+            where: { id, tenantId },
+            include: orderDetailInclude,
+          }),
+          statusChanged: true,
+        };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+
+    if (result.statusChanged) {
+      const operations: Array<Promise<void>> = [
+        this.redis.invalidateDashboard(tenantId),
+      ];
+      if (dto.status === OrderStatus.CONFIRMED) {
+        operations.push(
+          this.redis.publishDomainEvent('order.confirmed', tenantId, {
+            orderId: id,
+          }),
+        );
+      }
+      await Promise.all(operations);
+    }
+    return result.order;
   }
 
   private async deductInventory(

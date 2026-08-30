@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 import { environmentValidationSchema } from './config/environment.validation';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database/database.module';
 import { HivesModule } from './hives/hives.module';
 import { HoneyBatchesModule } from './honey-batches/honey-batches.module';
@@ -35,6 +36,7 @@ import { UsersModule } from './users/users.module';
     ProductionCyclesModule,
     HoneyBatchesModule,
     OrdersModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

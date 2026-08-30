@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Apiary, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { CreateApiaryDto } from './dto/create-apiary.dto';
 import { UpdateApiaryDto } from './dto/update-apiary.dto';
@@ -14,14 +15,17 @@ export class ApiariesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly redis: RedisService,
   ) {}
 
-  create(dto: CreateApiaryDto): Promise<Apiary> {
+  async create(dto: CreateApiaryDto): Promise<Apiary> {
     const tenantId = this.tenantContext.requireTenantId();
     this.validateCoordinates(dto.latitude, dto.longitude);
-    return this.prisma.apiary.create({
+    const apiary = await this.prisma.apiary.create({
       data: { tenantId, ...dto },
     });
+    await this.redis.invalidateDashboard(tenantId);
+    return apiary;
   }
 
   findAll(): Promise<Apiary[]> {
@@ -58,7 +62,9 @@ export class ApiariesService {
     if (result.count === 0) {
       throw new NotFoundException('Apiary not found');
     }
-    return this.findOne(id);
+    const apiary = await this.findOne(id);
+    await this.redis.invalidateDashboard(tenantId);
+    return apiary;
   }
 
   async remove(id: string): Promise<{ deleted: true }> {
@@ -69,6 +75,7 @@ export class ApiariesService {
     if (result.count === 0) {
       throw new NotFoundException('Apiary not found');
     }
+    await this.redis.invalidateDashboard(tenantId);
     return { deleted: true };
   }
 

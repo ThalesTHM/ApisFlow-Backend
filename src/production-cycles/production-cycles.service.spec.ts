@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ProductionCycleStatus } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { ProductionCyclesService } from './production-cycles.service';
 
@@ -22,6 +23,10 @@ describe('ProductionCyclesService', () => {
   const tenantContextMock = {
     requireTenantId: jest.fn(() => 'tenant-a'),
   };
+  const redisMock = {
+    invalidateDashboard: jest.fn(),
+    publishDomainEvent: jest.fn(),
+  };
   let service: ProductionCyclesService;
 
   beforeEach(() => {
@@ -29,6 +34,7 @@ describe('ProductionCyclesService', () => {
     service = new ProductionCyclesService(
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
+      redisMock as unknown as RedisService,
     );
   });
 
@@ -93,5 +99,29 @@ describe('ProductionCyclesService', () => {
       },
       select: { id: true },
     });
+  });
+
+  it('publishes production.completed after a completed cycle is created', async () => {
+    prismaMock.hive.findFirst.mockResolvedValue({ id: 'hive-a' });
+    prismaMock.productionCycle.create.mockResolvedValue({
+      id: 'cycle-a',
+      hiveId: 'hive-a',
+      status: ProductionCycleStatus.COMPLETED,
+    });
+
+    await service.create({
+      hiveId: '67c4e50e-ae02-45f4-9dd3-e266375b3799',
+      startDate: '2026-08-01',
+      endDate: '2026-08-30',
+      status: ProductionCycleStatus.COMPLETED,
+      actualProductionKg: 20,
+    });
+
+    expect(redisMock.invalidateDashboard).toHaveBeenCalledWith('tenant-a');
+    expect(redisMock.publishDomainEvent).toHaveBeenCalledWith(
+      'production.completed',
+      'tenant-a',
+      { productionCycleId: 'cycle-a', hiveId: 'hive-a' },
+    );
   });
 });
