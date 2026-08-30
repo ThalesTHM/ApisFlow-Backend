@@ -113,3 +113,11 @@ Production cycle statuses are `PLANNED`, `ACTIVE`, `COMPLETED`, and `CANCELLED`.
 - `PATCH /api/v1/orders/:id/status` confirms or cancels a pending order.
 
 Honey quality values are `STANDARD` and `PREMIUM`. Batch statuses are `AVAILABLE`, `DEPLETED`, and `BLOCKED`; availability is managed by the API and cannot become negative. Order statuses are `PENDING`, `CONFIRMED`, and `CANCELLED`. Confirmation deducts every item in one serializable database transaction, and finalized orders cannot change status.
+
+## Notifications and audit logs
+
+- `GET /api/v1/notifications` lists notifications for the authenticated user.
+- `PATCH /api/v1/notifications/:id/read` marks an owned notification as read.
+- `GET /api/v1/audit-logs` lists tenant-scoped audit entries for `ADMIN` users.
+
+User creation, hive creation and updates, production completion, honey batch creation, and order confirmation create an audit entry and notification. Audit attribution uses the user and tenant from the signed JWT; callers cannot supply either value.

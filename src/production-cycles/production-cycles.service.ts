@@ -4,7 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ProductionCycle, ProductionCycleStatus } from '@prisma/client';
+import {
+  NotificationType,
+  ProductionCycle,
+  ProductionCycleStatus,
+} from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { CreateProductionCycleDto } from './dto/create-production-cycle.dto';
@@ -23,6 +28,7 @@ export class ProductionCyclesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly activity: ActivityService,
   ) {}
 
   async create(dto: CreateProductionCycleDto): Promise<ProductionCycle> {
@@ -37,7 +43,7 @@ export class ProductionCyclesService {
     this.validateCycle(values);
     await this.ensureSingleActiveCycle(dto.hiveId, tenantId, values.status);
 
-    return this.prisma.productionCycle.create({
+    const cycle = await this.prisma.productionCycle.create({
       data: {
         tenantId,
         hiveId: dto.hiveId,
@@ -49,6 +55,10 @@ export class ProductionCyclesService {
         notes: dto.notes,
       },
     });
+    if (cycle.status === ProductionCycleStatus.COMPLETED) {
+      await this.recordCompletion(cycle);
+    }
+    return cycle;
   }
 
   findAll(filter: ProductionCycleFilterDto): Promise<ProductionCycle[]> {
@@ -106,7 +116,14 @@ export class ProductionCyclesService {
     if (result.count === 0) {
       throw new NotFoundException('Production cycle not found');
     }
-    return this.findOne(id);
+    const cycle = await this.findOne(id);
+    if (
+      current.status !== ProductionCycleStatus.COMPLETED &&
+      cycle.status === ProductionCycleStatus.COMPLETED
+    ) {
+      await this.recordCompletion(cycle);
+    }
+    return cycle;
   }
 
   async remove(id: string): Promise<{ deleted: true }> {
@@ -118,6 +135,20 @@ export class ProductionCyclesService {
       throw new NotFoundException('Production cycle not found');
     }
     return { deleted: true };
+  }
+
+  private async recordCompletion(cycle: ProductionCycle): Promise<void> {
+    await this.activity.record({
+      type: NotificationType.PRODUCTION_COMPLETED,
+      message: 'A production cycle was completed',
+      action: 'production-cycle.completed',
+      entity: 'ProductionCycle',
+      entityId: cycle.id,
+      metadata: {
+        hiveId: cycle.hiveId,
+        actualProductionKg: cycle.actualProductionKg?.toNumber() ?? null,
+      },
+    });
   }
 
   private validateCycle(values: CycleValues): void {

@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { ColonyStatus } from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { HivesService } from './hives.service';
@@ -18,6 +19,7 @@ describe('HivesService', () => {
   const tenantContextMock = {
     requireTenantId: jest.fn(() => 'tenant-a'),
   };
+  const activityMock = { record: jest.fn() };
   let service: HivesService;
 
   beforeEach(() => {
@@ -25,6 +27,30 @@ describe('HivesService', () => {
     service = new HivesService(
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
+      activityMock as unknown as ActivityService,
+    );
+  });
+
+  it('records hive creation activity', async () => {
+    prismaMock.apiary.findFirst.mockResolvedValue({ id: 'apiary-a' });
+    prismaMock.hive.create.mockResolvedValue({
+      id: 'hive-a',
+      code: 'HIVE-1',
+      apiaryId: 'apiary-a',
+    });
+
+    await service.create({
+      apiaryId: '67c4e50e-ae02-45f4-9dd3-e266375b3799',
+      code: 'HIVE-1',
+      installationDate: '2026-08-30',
+    });
+
+    expect(activityMock.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'hive.created',
+        entity: 'Hive',
+        entityId: 'hive-a',
+      }),
     );
   });
 

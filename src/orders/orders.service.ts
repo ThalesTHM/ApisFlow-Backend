@@ -4,7 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HoneyBatchStatus, OrderStatus, Prisma } from '@prisma/client';
+import {
+  HoneyBatchStatus,
+  NotificationType,
+  OrderStatus,
+  Prisma,
+} from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -29,6 +35,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly activity: ActivityService,
   ) {}
 
   async create(dto: CreateOrderDto) {
@@ -102,13 +109,13 @@ export class OrdersService {
     return order;
   }
 
-  updateStatus(id: string, dto: UpdateOrderStatusDto) {
+  async updateStatus(id: string, dto: UpdateOrderStatusDto) {
     const tenantId = this.tenantContext.requireTenantId();
     if (dto.status === OrderStatus.PENDING) {
       throw new BadRequestException('An order cannot return to pending');
     }
 
-    return this.prisma.$transaction(
+    const result = await this.prisma.$transaction(
       async (transaction) => {
         const order = await transaction.order.findFirst({
           where: { id, tenantId },
@@ -118,10 +125,13 @@ export class OrdersService {
           throw new NotFoundException('Order not found');
         }
         if (order.status === dto.status) {
-          return transaction.order.findFirstOrThrow({
-            where: { id, tenantId },
-            include: orderDetailInclude,
-          });
+          return {
+            order: await transaction.order.findFirstOrThrow({
+              where: { id, tenantId },
+              include: orderDetailInclude,
+            }),
+            statusChanged: false,
+          };
         }
         if (order.status !== OrderStatus.PENDING) {
           throw new ConflictException('A finalized order cannot change status');
@@ -139,13 +149,28 @@ export class OrdersService {
           await this.deductInventory(transaction, tenantId, order.items);
         }
 
-        return transaction.order.findFirstOrThrow({
-          where: { id, tenantId },
-          include: orderDetailInclude,
-        });
+        return {
+          order: await transaction.order.findFirstOrThrow({
+            where: { id, tenantId },
+            include: orderDetailInclude,
+          }),
+          statusChanged: true,
+        };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+
+    if (result.statusChanged && dto.status === OrderStatus.CONFIRMED) {
+      await this.activity.record({
+        type: NotificationType.ORDER_CONFIRMED,
+        message: `Order ${id} was confirmed`,
+        action: 'order.confirmed',
+        entity: 'Order',
+        entityId: id,
+        metadata: { total: result.order.total.toNumber() },
+      });
+    }
+    return result.order;
   }
 
   private async deductInventory(

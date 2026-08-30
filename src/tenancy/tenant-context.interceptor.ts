@@ -19,7 +19,9 @@ export class TenantContextInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
 
     return defer(() =>
-      this.tenantContext.run(request.user?.tenantId, () => next.handle()),
+      this.tenantContext.run(request.user?.tenantId, request.user?.sub, () =>
+        next.handle(),
+      ),
     );
   }
 }

@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Hive, Prisma } from '@prisma/client';
+import { Hive, NotificationType, Prisma } from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { CreateHiveDto } from './dto/create-hive.dto';
@@ -15,6 +16,7 @@ export class HivesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly activity: ActivityService,
   ) {}
 
   async create(dto: CreateHiveDto): Promise<Hive> {
@@ -22,7 +24,7 @@ export class HivesService {
     await this.requireApiary(dto.apiaryId, tenantId);
 
     try {
-      return await this.prisma.hive.create({
+      const hive = await this.prisma.hive.create({
         data: {
           tenantId,
           apiaryId: dto.apiaryId,
@@ -33,6 +35,15 @@ export class HivesService {
           notes: dto.notes,
         },
       });
+      await this.activity.record({
+        type: NotificationType.HIVE_CREATED,
+        message: `Hive ${hive.code} was created`,
+        action: 'hive.created',
+        entity: 'Hive',
+        entityId: hive.id,
+        metadata: { code: hive.code, apiaryId: hive.apiaryId },
+      });
+      return hive;
     } catch (error) {
       this.rethrowDuplicateCode(error);
     }
@@ -85,7 +96,16 @@ export class HivesService {
       if (result.count === 0) {
         throw new NotFoundException('Hive not found');
       }
-      return this.findOne(id);
+      const hive = await this.findOne(id);
+      await this.activity.record({
+        type: NotificationType.HIVE_UPDATED,
+        message: `Hive ${hive.code} was updated`,
+        action: 'hive.updated',
+        entity: 'Hive',
+        entityId: hive.id,
+        metadata: { changedFields: Object.keys(dto) },
+      });
+      return hive;
     } catch (error) {
       this.rethrowDuplicateCode(error);
     }

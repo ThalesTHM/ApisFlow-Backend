@@ -4,7 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HoneyBatch, HoneyBatchStatus, Prisma } from '@prisma/client';
+import {
+  HoneyBatch,
+  HoneyBatchStatus,
+  NotificationType,
+  Prisma,
+} from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { CreateHoneyBatchDto } from './dto/create-honey-batch.dto';
@@ -15,6 +21,7 @@ export class HoneyBatchesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly activity: ActivityService,
   ) {}
 
   async create(dto: CreateHoneyBatchDto): Promise<HoneyBatch> {
@@ -25,7 +32,7 @@ export class HoneyBatchesService {
     }
 
     try {
-      return await this.prisma.honeyBatch.create({
+      const batch = await this.prisma.honeyBatch.create({
         data: {
           tenantId,
           productionCycleId: dto.productionCycleId,
@@ -37,6 +44,19 @@ export class HoneyBatchesService {
           status: dto.status,
         },
       });
+      await this.activity.record({
+        type: NotificationType.HONEY_BATCH_CREATED,
+        message: `Honey batch ${batch.code} was created`,
+        action: 'honey-batch.created',
+        entity: 'HoneyBatch',
+        entityId: batch.id,
+        metadata: {
+          code: batch.code,
+          productionCycleId: batch.productionCycleId,
+          quantityKg: batch.quantityKg.toNumber(),
+        },
+      });
+      return batch;
     } catch (error) {
       this.rethrowPersistenceError(error);
     }
