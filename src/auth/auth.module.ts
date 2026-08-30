@@ -2,8 +2,12 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { JwtStrategy } from './jwt.strategy';
+import { PasswordService } from './password.service';
+import { RolesGuard } from './roles.guard';
 import { TokenService } from './token.service';
 
 @Global()
@@ -20,7 +24,15 @@ import { TokenService } from './token.service';
       }),
     }),
   ],
-  providers: [JwtStrategy, JwtAuthGuard, TokenService],
-  exports: [JwtAuthGuard, TokenService],
+  controllers: [AuthController],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtAuthGuard,
+    PasswordService,
+    RolesGuard,
+    TokenService,
+  ],
+  exports: [JwtAuthGuard, PasswordService, RolesGuard, TokenService],
 })
 export class AuthModule {}
