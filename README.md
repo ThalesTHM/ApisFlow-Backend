@@ -14,6 +14,8 @@ Business modules are intentionally not included yet.
 
 With GNU Make:
 
+Create a local `.env` file first using the required variables listed below.
+
 ```bash
 make setup
 make dev
@@ -23,19 +25,18 @@ Without Make:
 
 ```bash
 npm install
-cp .env.example .env
 docker compose up -d postgres redis
 npm run prisma:deploy
 npm run start:dev
 ```
 
-On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
+Required environment variables are `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `CORS_ORIGIN`, and `SWAGGER_ENABLED`. Keep local values in the ignored `.env` file. Production values must come from the deployment platform's secret and configuration system.
 
 The API is available at `http://localhost:3000/api/v1`. Swagger UI is available at `http://localhost:3000/docs` when `SWAGGER_ENABLED=true`.
 
 ## Full Docker setup
 
-Create `.env` from `.env.example`, replace `JWT_SECRET`, then run:
+Provide the required environment variables through your deployment environment, then run:
 
 ```bash
 make docker-up
