@@ -1,10 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
   IsNumber,
+  IsOptional,
   IsString,
   IsUUID,
   MaxLength,
@@ -38,11 +39,12 @@ export class CreateOrderDto {
   @MaxLength(150)
   customerName: string;
 
-  @ApiProperty({ example: '12.345.678/0001-90' })
+  @ApiPropertyOptional({ example: '+1 555-123-4567' })
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(30)
-  customerDocument: string;
+  customerPhone?: string;
 
   @ApiProperty({ type: [CreateOrderItemDto] })
   @IsArray()

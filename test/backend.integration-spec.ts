@@ -205,7 +205,7 @@ describe('Backend integration', () => {
         .set('Authorization', `Bearer ${tenantAToken}`)
         .send({
           customerName: 'Integration Customer',
-          customerDocument: '00.000.000/0001-00',
+          customerPhone: '+1 555-000-0000',
           items: [{ honeyBatchId: batch.id, quantityKg, unitPrice: 30 }],
         });
 

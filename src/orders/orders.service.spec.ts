@@ -60,7 +60,7 @@ describe('OrdersService order and inventory flow', () => {
 
     await service.create({
       customerName: 'Mercado Central',
-      customerDocument: '12.345.678/0001-90',
+      customerPhone: '+1 555-123-4567',
       items: [
         {
           honeyBatchId: '67c4e50e-ae02-45f4-9dd3-e266375b3799',

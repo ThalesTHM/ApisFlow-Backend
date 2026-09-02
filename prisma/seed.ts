@@ -210,7 +210,7 @@ async function main(): Promise<void> {
       where: { id: ids.order },
       update: {
         customerName: 'Emporio Central',
-        customerDocument: '12.345.678/0001-90',
+        customerPhone: '+55 11 91234-5678',
         status: OrderStatus.CONFIRMED,
         total: new Prisma.Decimal(420),
       },
@@ -218,7 +218,7 @@ async function main(): Promise<void> {
         id: ids.order,
         tenantId: ids.tenant,
         customerName: 'Emporio Central',
-        customerDocument: '12.345.678/0001-90',
+        customerPhone: '+55 11 91234-5678',
         status: OrderStatus.CONFIRMED,
         total: new Prisma.Decimal(420),
       },
