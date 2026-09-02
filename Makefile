@@ -7,7 +7,7 @@ help: ## Show available commands
 	@echo Honey Manager Backend
 	@echo.
 	@echo   make setup           Prepare local development
-	@echo   make dev             Start NestJS in watch mode
+	@echo   make dev             Start PostgreSQL/Redis then NestJS in watch mode
 	@echo   make docker-up       Build and run the full stack
 	@echo   make down            Stop the Docker stack
 	@echo   make check           Run lint, build, and tests
@@ -26,10 +26,11 @@ check-env: ## Verify local environment configuration exists
 install: ## Install exact npm dependencies
 	npm ci
 
-infra: ## Start PostgreSQL and Redis
+infra: ## Start PostgreSQL and Redis (launches Docker Desktop first if needed)
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ensure-docker.ps1
 	docker compose up -d --wait postgres redis
 
-dev: ## Start NestJS in watch mode
+dev: infra ## Start PostgreSQL/Redis then NestJS in watch mode
 	npm run start:dev
 
 docker-up: check-env ## Build and run the full Docker stack
