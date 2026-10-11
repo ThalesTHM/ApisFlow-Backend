@@ -1,18 +1,20 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup check-env install infra dev docker-up down restart logs ps \
-	build lint test test-e2e check prisma-generate migrate migrate-deploy studio clean
+	build lint test test-e2e test-integration check prisma-generate migrate migrate-deploy seed studio clean
 
 help: ## Show available commands
 	@echo Honey Manager Backend
 	@echo.
 	@echo   make setup           Prepare local development
-	@echo   make dev             Start NestJS in watch mode
+	@echo   make dev             Start PostgreSQL/Redis then NestJS in watch mode
 	@echo   make docker-up       Build and run the full stack
 	@echo   make down            Stop the Docker stack
 	@echo   make check           Run lint, build, and tests
+	@echo   make test-integration Run tests against disposable PostgreSQL
 	@echo   make migrate         Create/apply a development migration
 	@echo   make migrate-deploy  Apply committed migrations
+	@echo   make seed            Load realistic demo data
 	@echo   make studio          Open Prisma Studio
 	@echo   make logs            Follow Docker logs
 
@@ -24,10 +26,11 @@ check-env: ## Verify local environment configuration exists
 install: ## Install exact npm dependencies
 	npm ci
 
-infra: ## Start PostgreSQL and Redis
+infra: ## Start PostgreSQL and Redis (launches Docker Desktop first if needed)
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ensure-docker.ps1
 	docker compose up -d --wait postgres redis
 
-dev: ## Start NestJS in watch mode
+dev: infra ## Start PostgreSQL/Redis then NestJS in watch mode
 	npm run start:dev
 
 docker-up: check-env ## Build and run the full Docker stack
@@ -56,7 +59,10 @@ test: ## Run unit tests
 test-e2e: ## Run end-to-end tests
 	npm run test:e2e -- --runInBand
 
-check: lint build test test-e2e ## Run all code checks
+test-integration: ## Run database-backed integration tests
+	npm run test:integration
+
+check: lint build test test-e2e test-integration ## Run all code checks
 
 prisma-generate: ## Generate Prisma Client
 	npm run prisma:generate
@@ -66,6 +72,9 @@ migrate: ## Create and apply a development migration
 
 migrate-deploy: ## Apply committed migrations
 	npm run prisma:deploy
+
+seed: ## Load deterministic demo data
+	npm run prisma:seed
 
 studio: ## Open Prisma Studio
 	npm run prisma:studio

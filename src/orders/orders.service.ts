@@ -72,7 +72,7 @@ export class OrdersService {
       data: {
         tenantId,
         customerName: dto.customerName,
-        customerDocument: dto.customerDocument,
+        customerPhone: dto.customerPhone,
         total,
         items: {
           create: items.map((item) => ({
