@@ -4,7 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ProductionCycle, ProductionCycleStatus } from '@prisma/client';
+import {
+  NotificationType,
+  ProductionCycle,
+  ProductionCycleStatus,
+} from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
@@ -25,6 +30,7 @@ export class ProductionCyclesService {
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
     private readonly redis: RedisService,
+    private readonly activity: ActivityService,
   ) {}
 
   async create(dto: CreateProductionCycleDto): Promise<ProductionCycle> {
@@ -56,6 +62,9 @@ export class ProductionCyclesService {
       cycle,
       cycle.status === ProductionCycleStatus.COMPLETED,
     );
+    if (cycle.status === ProductionCycleStatus.COMPLETED) {
+      await this.recordCompletion(cycle);
+    }
     return cycle;
   }
 
@@ -121,6 +130,12 @@ export class ProductionCyclesService {
       current.status !== ProductionCycleStatus.COMPLETED &&
         cycle.status === ProductionCycleStatus.COMPLETED,
     );
+    if (
+      current.status !== ProductionCycleStatus.COMPLETED &&
+      cycle.status === ProductionCycleStatus.COMPLETED
+    ) {
+      await this.recordCompletion(cycle);
+    }
     return cycle;
   }
 
@@ -153,6 +168,20 @@ export class ProductionCyclesService {
       );
     }
     await Promise.all(operations);
+  }
+
+  private async recordCompletion(cycle: ProductionCycle): Promise<void> {
+    await this.activity.record({
+      type: NotificationType.PRODUCTION_COMPLETED,
+      message: 'A production cycle was completed',
+      action: 'production-cycle.completed',
+      entity: 'ProductionCycle',
+      entityId: cycle.id,
+      metadata: {
+        hiveId: cycle.hiveId,
+        actualProductionKg: cycle.actualProductionKg?.toNumber() ?? null,
+      },
+    });
   }
 
   private validateCycle(values: CycleValues): void {

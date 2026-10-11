@@ -3,14 +3,19 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 interface TenantStore {
   tenantId?: string;
+  userId?: string;
 }
 
 @Injectable()
 export class TenantContextService {
   private readonly storage = new AsyncLocalStorage<TenantStore>();
 
-  run<T>(tenantId: string | undefined, callback: () => T): T {
-    return this.storage.run({ tenantId }, callback);
+  run<T>(
+    tenantId: string | undefined,
+    userId: string | undefined,
+    callback: () => T,
+  ): T {
+    return this.storage.run({ tenantId, userId }, callback);
   }
 
   get tenantId(): string | undefined {
@@ -24,5 +29,14 @@ export class TenantContextService {
     }
 
     return tenantId;
+  }
+
+  requireUserId(): string {
+    const userId = this.storage.getStore()?.userId;
+    if (!userId) {
+      throw new ForbiddenException('User context is required');
+    }
+
+    return userId;
   }
 }

@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { HoneyBatchStatus, HoneyQuality, Prisma } from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
@@ -23,6 +24,7 @@ describe('HoneyBatchesService', () => {
     invalidateDashboard: jest.fn(),
     publishDomainEvent: jest.fn(),
   };
+  const activityMock = { record: jest.fn() };
   let service: HoneyBatchesService;
 
   beforeEach(() => {
@@ -31,6 +33,7 @@ describe('HoneyBatchesService', () => {
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
       redisMock as unknown as RedisService,
+      activityMock as unknown as ActivityService,
     );
   });
 
@@ -39,6 +42,8 @@ describe('HoneyBatchesService', () => {
     prismaMock.honeyBatch.create.mockResolvedValue({
       id: 'batch-a',
       productionCycleId: 'cycle-a',
+      code: 'BATCH-001',
+      quantityKg: new Prisma.Decimal(20),
     });
 
     await service.create({
@@ -57,6 +62,12 @@ describe('HoneyBatchesService', () => {
       quantityKg: 20,
       availableQuantityKg: 20,
     });
+    expect(activityMock.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'honey-batch.created',
+        entityId: 'batch-a',
+      }),
+    );
     expect(redisMock.invalidateDashboard).toHaveBeenCalledWith('tenant-a');
     expect(redisMock.publishDomainEvent).toHaveBeenCalledWith(
       'honey-batch.created',

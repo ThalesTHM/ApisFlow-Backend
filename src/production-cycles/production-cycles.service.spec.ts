@@ -3,7 +3,8 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { ProductionCycleStatus } from '@prisma/client';
+import { Prisma, ProductionCycleStatus } from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
@@ -27,6 +28,7 @@ describe('ProductionCyclesService', () => {
     invalidateDashboard: jest.fn(),
     publishDomainEvent: jest.fn(),
   };
+  const activityMock = { record: jest.fn() };
   let service: ProductionCyclesService;
 
   beforeEach(() => {
@@ -35,6 +37,7 @@ describe('ProductionCyclesService', () => {
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
       redisMock as unknown as RedisService,
+      activityMock as unknown as ActivityService,
     );
   });
 
@@ -99,6 +102,31 @@ describe('ProductionCyclesService', () => {
       },
       select: { id: true },
     });
+  });
+
+  it('records production completion activity', async () => {
+    prismaMock.hive.findFirst.mockResolvedValue({ id: 'hive-a' });
+    prismaMock.productionCycle.create.mockResolvedValue({
+      id: 'cycle-a',
+      hiveId: 'hive-a',
+      status: ProductionCycleStatus.COMPLETED,
+      actualProductionKg: new Prisma.Decimal(20),
+    });
+
+    await service.create({
+      hiveId: '67c4e50e-ae02-45f4-9dd3-e266375b3799',
+      startDate: '2026-08-01',
+      endDate: '2026-08-30',
+      status: ProductionCycleStatus.COMPLETED,
+      actualProductionKg: 20,
+    });
+
+    expect(activityMock.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'production-cycle.completed',
+        entityId: 'cycle-a',
+      }),
+    );
   });
 
   it('publishes production.completed after a completed cycle is created', async () => {

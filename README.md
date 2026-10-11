@@ -120,3 +120,11 @@ Honey quality values are `STANDARD` and `PREMIUM`. Batch statuses are `AVAILABLE
 - `GET /api/v1/dashboard/production?period=month` groups produced honey by `day`, `month`, or `year`.
 
 Dashboard responses are cached in Redis for 60 seconds with tenant-specific keys. Mutations invalidate the affected tenant's dashboard cache. Redis Pub/Sub channel `domain-events` receives `hive.created`, `production.completed`, `honey-batch.created`, and `order.confirmed` event envelopes. Redis failures are logged and do not fail database mutations or dashboard queries.
+
+## Notifications and audit logs
+
+- `GET /api/v1/notifications` lists notifications for the authenticated user.
+- `PATCH /api/v1/notifications/:id/read` marks an owned notification as read.
+- `GET /api/v1/audit-logs` lists tenant-scoped audit entries for `ADMIN` users.
+
+User creation, hive creation and updates, production completion, honey batch creation, and order confirmation create an audit entry and notification. Audit attribution uses the user and tenant from the signed JWT; callers cannot supply either value.

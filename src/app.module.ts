@@ -3,7 +3,9 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ActivityModule } from './activity/activity.module';
 import { ApiariesModule } from './apiaries/apiaries.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AuthModule } from './auth/auth.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
@@ -12,6 +14,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database/database.module';
 import { HivesModule } from './hives/hives.module';
 import { HoneyBatchesModule } from './honey-batches/honey-batches.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { OrdersModule } from './orders/orders.module';
 import { ProductionCyclesModule } from './production-cycles/production-cycles.module';
 import { RedisModule } from './redis/redis.module';
@@ -28,6 +31,7 @@ import { UsersModule } from './users/users.module';
     }),
     DatabaseModule,
     RedisModule,
+    ActivityModule,
     AuthModule,
     TenancyModule,
     UsersModule,
@@ -37,6 +41,8 @@ import { UsersModule } from './users/users.module';
     HoneyBatchesModule,
     OrdersModule,
     DashboardModule,
+    NotificationsModule,
+    AuditLogsModule,
   ],
   controllers: [AppController],
   providers: [

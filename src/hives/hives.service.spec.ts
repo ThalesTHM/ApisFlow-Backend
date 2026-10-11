@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { ColonyStatus } from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
@@ -23,6 +24,7 @@ describe('HivesService', () => {
     invalidateDashboard: jest.fn(),
     publishDomainEvent: jest.fn(),
   };
+  const activityMock = { record: jest.fn() };
   let service: HivesService;
 
   beforeEach(() => {
@@ -31,12 +33,17 @@ describe('HivesService', () => {
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
       redisMock as unknown as RedisService,
+      activityMock as unknown as ActivityService,
     );
   });
 
-  it('publishes hive.created and invalidates the dashboard after creation', async () => {
+  it('records hive creation activity', async () => {
     prismaMock.apiary.findFirst.mockResolvedValue({ id: 'apiary-a' });
-    prismaMock.hive.create.mockResolvedValue({ id: 'hive-a' });
+    prismaMock.hive.create.mockResolvedValue({
+      id: 'hive-a',
+      code: 'HIVE-1',
+      apiaryId: 'apiary-a',
+    });
 
     await service.create({
       apiaryId: '67c4e50e-ae02-45f4-9dd3-e266375b3799',
@@ -44,11 +51,12 @@ describe('HivesService', () => {
       installationDate: '2026-08-30',
     });
 
-    expect(redisMock.invalidateDashboard).toHaveBeenCalledWith('tenant-a');
-    expect(redisMock.publishDomainEvent).toHaveBeenCalledWith(
-      'hive.created',
-      'tenant-a',
-      { hiveId: 'hive-a' },
+    expect(activityMock.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'hive.created',
+        entity: 'Hive',
+        entityId: 'hive-a',
+      }),
     );
   });
 
@@ -100,5 +108,23 @@ describe('HivesService', () => {
     expect(prismaMock.hive.deleteMany).toHaveBeenCalledWith({
       where: { id: 'hive-b', tenantId: 'tenant-a' },
     });
+  });
+
+  it('publishes hive.created and invalidates the dashboard after creation', async () => {
+    prismaMock.apiary.findFirst.mockResolvedValue({ id: 'apiary-a' });
+    prismaMock.hive.create.mockResolvedValue({ id: 'hive-a' });
+
+    await service.create({
+      apiaryId: '67c4e50e-ae02-45f4-9dd3-e266375b3799',
+      code: 'HIVE-1',
+      installationDate: '2026-08-30',
+    });
+
+    expect(redisMock.invalidateDashboard).toHaveBeenCalledWith('tenant-a');
+    expect(redisMock.publishDomainEvent).toHaveBeenCalledWith(
+      'hive.created',
+      'tenant-a',
+      { hiveId: 'hive-a' },
+    );
   });
 });

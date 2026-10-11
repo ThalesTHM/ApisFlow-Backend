@@ -4,7 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { HoneyBatchStatus, OrderStatus, Prisma } from '@prisma/client';
+import {
+  HoneyBatchStatus,
+  NotificationType,
+  OrderStatus,
+  Prisma,
+} from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
@@ -31,6 +37,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
     private readonly redis: RedisService,
+    private readonly activity: ActivityService,
   ) {}
 
   async create(dto: CreateOrderDto) {
@@ -169,6 +176,16 @@ export class OrdersService {
         );
       }
       await Promise.all(operations);
+    }
+    if (result.statusChanged && dto.status === OrderStatus.CONFIRMED) {
+      await this.activity.record({
+        type: NotificationType.ORDER_CONFIRMED,
+        message: `Order ${id} was confirmed`,
+        action: 'order.confirmed',
+        entity: 'Order',
+        entityId: id,
+        metadata: { total: result.order.total.toNumber() },
+      });
     }
     return result.order;
   }
