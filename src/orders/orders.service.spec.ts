@@ -1,6 +1,8 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { HoneyBatchStatus, OrderStatus, Prisma } from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { OrdersService } from './orders.service';
 
@@ -37,6 +39,11 @@ describe('OrdersService order and inventory flow', () => {
   const tenantContextMock = {
     requireTenantId: jest.fn(() => 'tenant-a'),
   };
+  const redisMock = {
+    invalidateDashboard: jest.fn(),
+    publishDomainEvent: jest.fn(),
+  };
+  const activityMock = { record: jest.fn() };
   let service: OrdersService;
 
   beforeEach(() => {
@@ -48,6 +55,8 @@ describe('OrdersService order and inventory flow', () => {
     service = new OrdersService(
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
+      redisMock as unknown as RedisService,
+      activityMock as unknown as ActivityService,
     );
   });
 
@@ -60,7 +69,7 @@ describe('OrdersService order and inventory flow', () => {
 
     await service.create({
       customerName: 'Mercado Central',
-      customerDocument: '12.345.678/0001-90',
+      customerPhone: '+1 555-123-4567',
       items: [
         {
           honeyBatchId: '67c4e50e-ae02-45f4-9dd3-e266375b3799',
@@ -93,6 +102,7 @@ describe('OrdersService order and inventory flow', () => {
         tenantId: 'tenant-a',
       },
     });
+    expect(redisMock.invalidateDashboard).toHaveBeenCalledWith('tenant-a');
   });
 
   it('returns tenant-scoped detail with complete traceability', async () => {
@@ -131,6 +141,7 @@ describe('OrdersService order and inventory flow', () => {
     prismaMock.order.findFirstOrThrow.mockResolvedValue({
       id: 'order-a',
       status: OrderStatus.CONFIRMED,
+      total: new Prisma.Decimal(50),
     });
 
     await service.updateStatus('order-a', {
@@ -165,6 +176,19 @@ describe('OrdersService order and inventory flow', () => {
       },
       data: { status: HoneyBatchStatus.DEPLETED },
     });
+    expect(redisMock.invalidateDashboard).toHaveBeenCalledWith('tenant-a');
+    expect(redisMock.publishDomainEvent).toHaveBeenCalledWith(
+      'order.confirmed',
+      'tenant-a',
+      { orderId: 'order-a' },
+    );
+    expect(activityMock.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'order.confirmed',
+        entityId: 'order-a',
+        metadata: { total: 50 },
+      }),
+    );
   });
 
   it('prevents confirmation when stock is insufficient', async () => {
@@ -197,5 +221,43 @@ describe('OrdersService order and inventory flow', () => {
       service.updateStatus('order-a', { status: OrderStatus.CANCELLED }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(prismaMock.honeyBatch.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not duplicate activity for an idempotent confirmation', async () => {
+    prismaMock.order.findFirst.mockResolvedValue({
+      id: 'order-a',
+      status: OrderStatus.CONFIRMED,
+      items: [],
+    });
+    prismaMock.order.findFirstOrThrow.mockResolvedValue({
+      id: 'order-a',
+      status: OrderStatus.CONFIRMED,
+      total: new Prisma.Decimal(50),
+    });
+
+    await service.updateStatus('order-a', {
+      status: OrderStatus.CONFIRMED,
+    });
+
+    expect(activityMock.record).not.toHaveBeenCalled();
+  });
+
+  it('does not republish an idempotent order confirmation', async () => {
+    prismaMock.order.findFirst.mockResolvedValue({
+      id: 'order-a',
+      status: OrderStatus.CONFIRMED,
+      items: [],
+    });
+    prismaMock.order.findFirstOrThrow.mockResolvedValue({
+      id: 'order-a',
+      status: OrderStatus.CONFIRMED,
+    });
+
+    await service.updateStatus('order-a', {
+      status: OrderStatus.CONFIRMED,
+    });
+
+    expect(redisMock.invalidateDashboard).not.toHaveBeenCalled();
+    expect(redisMock.publishDomainEvent).not.toHaveBeenCalled();
   });
 });
