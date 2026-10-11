@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { HoneyBatchStatus, OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { OrdersService } from './orders.service';
 
@@ -37,6 +38,10 @@ describe('OrdersService order and inventory flow', () => {
   const tenantContextMock = {
     requireTenantId: jest.fn(() => 'tenant-a'),
   };
+  const redisMock = {
+    invalidateDashboard: jest.fn(),
+    publishDomainEvent: jest.fn(),
+  };
   let service: OrdersService;
 
   beforeEach(() => {
@@ -48,6 +53,7 @@ describe('OrdersService order and inventory flow', () => {
     service = new OrdersService(
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
+      redisMock as unknown as RedisService,
     );
   });
 
@@ -93,6 +99,7 @@ describe('OrdersService order and inventory flow', () => {
         tenantId: 'tenant-a',
       },
     });
+    expect(redisMock.invalidateDashboard).toHaveBeenCalledWith('tenant-a');
   });
 
   it('returns tenant-scoped detail with complete traceability', async () => {
@@ -165,6 +172,12 @@ describe('OrdersService order and inventory flow', () => {
       },
       data: { status: HoneyBatchStatus.DEPLETED },
     });
+    expect(redisMock.invalidateDashboard).toHaveBeenCalledWith('tenant-a');
+    expect(redisMock.publishDomainEvent).toHaveBeenCalledWith(
+      'order.confirmed',
+      'tenant-a',
+      { orderId: 'order-a' },
+    );
   });
 
   it('prevents confirmation when stock is insufficient', async () => {
@@ -197,5 +210,24 @@ describe('OrdersService order and inventory flow', () => {
       service.updateStatus('order-a', { status: OrderStatus.CANCELLED }),
     ).rejects.toBeInstanceOf(ConflictException);
     expect(prismaMock.honeyBatch.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not republish an idempotent order confirmation', async () => {
+    prismaMock.order.findFirst.mockResolvedValue({
+      id: 'order-a',
+      status: OrderStatus.CONFIRMED,
+      items: [],
+    });
+    prismaMock.order.findFirstOrThrow.mockResolvedValue({
+      id: 'order-a',
+      status: OrderStatus.CONFIRMED,
+    });
+
+    await service.updateStatus('order-a', {
+      status: OrderStatus.CONFIRMED,
+    });
+
+    expect(redisMock.invalidateDashboard).not.toHaveBeenCalled();
+    expect(redisMock.publishDomainEvent).not.toHaveBeenCalled();
   });
 });

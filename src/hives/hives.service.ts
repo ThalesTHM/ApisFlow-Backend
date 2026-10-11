@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Hive, Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { CreateHiveDto } from './dto/create-hive.dto';
 import { HiveFilterDto } from './dto/hive-filter.dto';
@@ -15,6 +16,7 @@ export class HivesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
+    private readonly redis: RedisService,
   ) {}
 
   async create(dto: CreateHiveDto): Promise<Hive> {
@@ -22,7 +24,7 @@ export class HivesService {
     await this.requireApiary(dto.apiaryId, tenantId);
 
     try {
-      return await this.prisma.hive.create({
+      const hive = await this.prisma.hive.create({
         data: {
           tenantId,
           apiaryId: dto.apiaryId,
@@ -33,6 +35,13 @@ export class HivesService {
           notes: dto.notes,
         },
       });
+      await Promise.all([
+        this.redis.invalidateDashboard(tenantId),
+        this.redis.publishDomainEvent('hive.created', tenantId, {
+          hiveId: hive.id,
+        }),
+      ]);
+      return hive;
     } catch (error) {
       this.rethrowDuplicateCode(error);
     }
@@ -85,7 +94,9 @@ export class HivesService {
       if (result.count === 0) {
         throw new NotFoundException('Hive not found');
       }
-      return this.findOne(id);
+      const hive = await this.findOne(id);
+      await this.redis.invalidateDashboard(tenantId);
+      return hive;
     } catch (error) {
       this.rethrowDuplicateCode(error);
     }
@@ -99,6 +110,7 @@ export class HivesService {
     if (result.count === 0) {
       throw new NotFoundException('Hive not found');
     }
+    await this.redis.invalidateDashboard(tenantId);
     return { deleted: true };
   }
 

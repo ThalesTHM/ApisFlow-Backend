@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
 import { ApiariesService } from './apiaries.service';
 
@@ -16,6 +17,7 @@ describe('ApiariesService', () => {
   const tenantContextMock = {
     requireTenantId: jest.fn(() => 'tenant-a'),
   };
+  const redisMock = { invalidateDashboard: jest.fn() };
   let service: ApiariesService;
 
   beforeEach(() => {
@@ -23,6 +25,7 @@ describe('ApiariesService', () => {
     service = new ApiariesService(
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
+      redisMock as unknown as RedisService,
     );
   });
 
@@ -38,16 +41,17 @@ describe('ApiariesService', () => {
         location: 'North field',
       },
     });
+    expect(redisMock.invalidateDashboard).toHaveBeenCalledWith('tenant-a');
   });
 
-  it('requires latitude and longitude together', () => {
-    expect(() =>
+  it('requires latitude and longitude together', async () => {
+    await expect(
       service.create({
         name: 'North',
         location: 'North field',
         latitude: -23.5,
       }),
-    ).toThrow(BadRequestException);
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('hides apiaries belonging to another tenant', async () => {
