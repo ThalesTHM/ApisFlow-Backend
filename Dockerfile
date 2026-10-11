@@ -11,6 +11,9 @@ COPY nest-cli.json tsconfig*.json ./
 COPY src ./src
 RUN npm run build
 
+# Estágio build também é a imagem de migração (tem o Prisma CLI)
+COPY scripts ./scripts
+
 FROM node:20.19-alpine AS runtime
 
 WORKDIR /app
