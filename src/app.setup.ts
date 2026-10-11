@@ -26,9 +26,15 @@ export function configureApp(app: INestApplication): void {
   if (config.getOrThrow<boolean>('SWAGGER_ENABLED')) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Honey Manager API')
-      .setDescription('API for multi-tenant beekeeping operations')
-      .setVersion('1.0')
-      .addBearerAuth()
+      .setDescription(
+        'Tenant-isolated API for apiaries, hives, production, honey inventory, and orders.',
+      )
+      .setVersion('1.0.0')
+      .addServer('/api/v1', 'Current environment')
+      .addBearerAuth(
+        { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        'bearer',
+      )
       .build();
     SwaggerModule.setup(
       'docs',

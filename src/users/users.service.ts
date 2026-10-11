@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PublicUser, publicUserSelect } from '../auth/auth.service';
 import { PasswordService } from '../auth/password.service';
 import { PrismaService } from '../database/prisma.service';
@@ -17,6 +18,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
     private readonly passwords: PasswordService,
+    private readonly activity: ActivityService,
   ) {}
 
   async create(dto: CreateUserDto): Promise<PublicUser> {
@@ -24,7 +26,7 @@ export class UsersService {
     const passwordHash = await this.passwords.hash(dto.password);
 
     try {
-      return await this.prisma.user.create({
+      const user = await this.prisma.user.create({
         data: {
           tenantId,
           name: dto.name,
@@ -34,6 +36,16 @@ export class UsersService {
         },
         select: publicUserSelect,
       });
+      await this.activity.record({
+        type: NotificationType.USER_CREATED,
+        message: 'Your user account was created',
+        action: 'user.created',
+        entity: 'User',
+        entityId: user.id,
+        metadata: { email: user.email, role: user.role },
+        notificationUserId: user.id,
+      });
+      return user;
     } catch (error) {
       this.rethrowUniqueEmail(error);
     }
