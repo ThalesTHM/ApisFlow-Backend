@@ -21,7 +21,9 @@ const statements = [
        CREATE ROLE ${user} LOGIN;
      END IF;
    END $$`,
-  `ALTER ROLE ${user} WITH LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE`,
+  // No RDS o usuário mestre não é SUPERUSER e não pode alterar esses atributos;
+  // CREATE ROLE já cria o papel com NOSUPERUSER, NOBYPASSRLS, NOCREATEDB e NOCREATEROLE.
+  `ALTER ROLE ${user} WITH LOGIN PASSWORD '${password}'`,
   `GRANT USAGE ON SCHEMA public TO ${user}`,
   `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${user}`,
   `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${user}`,
