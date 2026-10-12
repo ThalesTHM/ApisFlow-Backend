@@ -31,16 +31,21 @@ async function main() {
       update: {},
       create: { name: tenantName, slug },
     });
-    await prisma.user.upsert({
-      where: { tenantId_email: { tenantId: tenant.id, email } },
-      update: { passwordHash, role: UserRole.ADMIN, isActive: true },
-      create: {
-        tenantId: tenant.id,
-        name: 'Administrador',
-        email,
-        passwordHash,
-        role: UserRole.ADMIN,
-      },
+    // users tem Row-Level Security (FORCE vale até para o dono das tabelas):
+    // a escrita precisa acontecer numa transação que define o tenant.
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenant.id}, TRUE)`;
+      await tx.user.upsert({
+        where: { tenantId_email: { tenantId: tenant.id, email } },
+        update: { passwordHash, role: UserRole.ADMIN, isActive: true },
+        create: {
+          tenantId: tenant.id,
+          name: 'Administrador',
+          email,
+          passwordHash,
+          role: UserRole.ADMIN,
+        },
+      });
     });
     console.log(
       JSON.stringify({

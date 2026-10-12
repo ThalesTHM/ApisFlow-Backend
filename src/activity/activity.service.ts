@@ -24,8 +24,8 @@ export class ActivityService {
     const tenantId = this.tenantContext.requireTenantId();
     const actorUserId = this.tenantContext.requireUserId();
 
-    await this.prisma.$transaction([
-      this.prisma.auditLog.create({
+    await this.prisma.tenantTransaction(async (tx) => {
+      await tx.auditLog.create({
         data: {
           tenantId,
           userId: actorUserId,
@@ -34,15 +34,15 @@ export class ActivityService {
           entityId: input.entityId,
           metadata: input.metadata,
         },
-      }),
-      this.prisma.notification.create({
+      });
+      await tx.notification.create({
         data: {
           tenantId,
           userId: input.notificationUserId ?? actorUserId,
           type: input.type,
           message: input.message,
         },
-      }),
-    ]);
+      });
+    });
   }
 }
