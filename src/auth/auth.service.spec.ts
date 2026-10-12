@@ -68,11 +68,13 @@ describe('AuthService', () => {
     });
 
     expect(passwordMock.hash).toHaveBeenCalledWith('plain-password');
-    expect(prismaMock.tenant.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ name: tenant.name, slug: tenant.slug }),
-      }),
-    );
+    const tenantCreate = prismaMock.tenant.create.mock.calls[0] as unknown as [
+      { data: { id: string; name: string; slug: string } },
+    ];
+    expect(tenantCreate[0].data).toMatchObject({
+      name: tenant.name,
+      slug: tenant.slug,
+    });
     expect(prismaMock.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
