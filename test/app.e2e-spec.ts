@@ -10,6 +10,16 @@ interface HealthResponse {
   timestamp: string;
 }
 
+interface OpenApiOperation {
+  summary?: string;
+  responses?: Record<string, unknown>;
+}
+
+interface OpenApiDocument {
+  info: { version: string };
+  paths: Record<string, Record<string, OpenApiOperation>>;
+}
+
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
@@ -35,6 +45,25 @@ describe('AppController (e2e)', () => {
         const health = body as HealthResponse;
         expect(health.status).toBe('ok');
         expect(health.timestamp).toEqual(expect.any(String));
+      });
+  });
+
+  it('/docs-json documents every operation with summaries and responses', () => {
+    return request(app.getHttpServer())
+      .get('/docs-json')
+      .expect(200)
+      .expect(({ body }) => {
+        const document = body as OpenApiDocument;
+        const operations = Object.values(document.paths).flatMap((path) =>
+          Object.values(path),
+        );
+
+        expect(document.info.version).toBe('1.0.0');
+        expect(operations).toHaveLength(33);
+        for (const operation of operations) {
+          expect(operation.summary).toEqual(expect.any(String));
+          expect(Object.keys(operation.responses ?? {})).not.toHaveLength(0);
+        }
       });
   });
 

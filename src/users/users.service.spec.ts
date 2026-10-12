@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
 import { PasswordService } from '../auth/password.service';
 import { PrismaService } from '../database/prisma.service';
 import { TenantContextService } from '../tenancy/tenant-context.service';
@@ -19,6 +20,7 @@ describe('UsersService tenant isolation', () => {
     requireTenantId: jest.fn(() => 'tenant-a'),
   };
   const passwordMock = { hash: jest.fn() };
+  const activityMock = { record: jest.fn() };
   let service: UsersService;
 
   beforeEach(() => {
@@ -28,6 +30,7 @@ describe('UsersService tenant isolation', () => {
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
       passwordMock as unknown as PasswordService,
+      activityMock as unknown as ActivityService,
     );
   });
 
@@ -56,7 +59,11 @@ describe('UsersService tenant isolation', () => {
 
   it('injects tenantId when creating a user and never reads it from input', async () => {
     passwordMock.hash.mockResolvedValue('hashed-password');
-    prismaMock.user.create.mockResolvedValue({});
+    prismaMock.user.create.mockResolvedValue({
+      id: 'new-user-a',
+      email: 'operator@tenant.test',
+      role: UserRole.OPERATOR,
+    });
 
     await service.create({
       name: 'Operator',
@@ -74,6 +81,13 @@ describe('UsersService tenant isolation', () => {
           passwordHash: 'hashed-password',
           role: UserRole.OPERATOR,
         },
+      }),
+    );
+    expect(activityMock.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'user.created',
+        entityId: 'new-user-a',
+        notificationUserId: 'new-user-a',
       }),
     );
   });

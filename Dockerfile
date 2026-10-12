@@ -1,15 +1,17 @@
 FROM node:20.19-alpine AS build
 
 WORKDIR /app
+# O postinstall do npm ci roda `prisma generate`, então o schema precisa vir antes
 COPY package*.json ./
-RUN npm ci
-
 COPY prisma ./prisma
-RUN npx prisma generate
+RUN npm ci
 
 COPY nest-cli.json tsconfig*.json ./
 COPY src ./src
 RUN npm run build
+
+# Estágio build também é a imagem de migração (tem o Prisma CLI)
+COPY scripts ./scripts
 
 FROM node:20.19-alpine AS runtime
 

@@ -1,0 +1,157 @@
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Hive, NotificationType, Prisma } from '@prisma/client';
+import { ActivityService } from '../activity/activity.service';
+import { PrismaService } from '../database/prisma.service';
+import { RedisService } from '../redis/redis.service';
+import { TenantContextService } from '../tenancy/tenant-context.service';
+import { CreateHiveDto } from './dto/create-hive.dto';
+import { HiveFilterDto } from './dto/hive-filter.dto';
+import { UpdateHiveDto } from './dto/update-hive.dto';
+
+@Injectable()
+export class HivesService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantContext: TenantContextService,
+    private readonly redis: RedisService,
+    private readonly activity: ActivityService,
+  ) {}
+
+  async create(dto: CreateHiveDto): Promise<Hive> {
+    const tenantId = this.tenantContext.requireTenantId();
+    await this.requireApiary(dto.apiaryId, tenantId);
+
+    try {
+      const hive = await this.prisma.hive.create({
+        data: {
+          tenantId,
+          apiaryId: dto.apiaryId,
+          code: dto.code,
+          queenStatus: dto.queenStatus,
+          colonyStatus: dto.colonyStatus,
+          installationDate: new Date(dto.installationDate),
+          notes: dto.notes,
+        },
+      });
+      await Promise.all([
+        this.redis.invalidateDashboard(tenantId),
+        this.redis.publishDomainEvent('hive.created', tenantId, {
+          hiveId: hive.id,
+        }),
+      ]);
+      await this.activity.record({
+        type: NotificationType.HIVE_CREATED,
+        message: `Hive ${hive.code} was created`,
+        action: 'hive.created',
+        entity: 'Hive',
+        entityId: hive.id,
+        metadata: { code: hive.code, apiaryId: hive.apiaryId },
+      });
+      return hive;
+    } catch (error) {
+      this.rethrowDuplicateCode(error);
+    }
+  }
+
+  findAll(filter: HiveFilterDto): Promise<Hive[]> {
+    const tenantId = this.tenantContext.requireTenantId();
+    return this.prisma.hive.findMany({
+      where: {
+        tenantId,
+        apiaryId: filter.apiaryId,
+        colonyStatus: filter.status,
+      },
+      orderBy: { code: 'asc' },
+    });
+  }
+
+  async findOne(id: string): Promise<Hive> {
+    const tenantId = this.tenantContext.requireTenantId();
+    const hive = await this.prisma.hive.findFirst({
+      where: { id, tenantId },
+    });
+    if (!hive) {
+      throw new NotFoundException('Hive not found');
+    }
+    return hive;
+  }
+
+  async update(id: string, dto: UpdateHiveDto): Promise<Hive> {
+    const tenantId = this.tenantContext.requireTenantId();
+    await this.findOne(id);
+    if (dto.apiaryId) {
+      await this.requireApiary(dto.apiaryId, tenantId);
+    }
+
+    try {
+      const result = await this.prisma.hive.updateMany({
+        where: { id, tenantId },
+        data: {
+          apiaryId: dto.apiaryId,
+          code: dto.code,
+          queenStatus: dto.queenStatus,
+          colonyStatus: dto.colonyStatus,
+          installationDate: dto.installationDate
+            ? new Date(dto.installationDate)
+            : undefined,
+          notes: dto.notes,
+        },
+      });
+      if (result.count === 0) {
+        throw new NotFoundException('Hive not found');
+      }
+      const hive = await this.findOne(id);
+      await this.redis.invalidateDashboard(tenantId);
+      await this.activity.record({
+        type: NotificationType.HIVE_UPDATED,
+        message: `Hive ${hive.code} was updated`,
+        action: 'hive.updated',
+        entity: 'Hive',
+        entityId: hive.id,
+        metadata: { changedFields: Object.keys(dto) },
+      });
+      return hive;
+    } catch (error) {
+      this.rethrowDuplicateCode(error);
+    }
+  }
+
+  async remove(id: string): Promise<{ deleted: true }> {
+    const tenantId = this.tenantContext.requireTenantId();
+    const result = await this.prisma.hive.deleteMany({
+      where: { id, tenantId },
+    });
+    if (result.count === 0) {
+      throw new NotFoundException('Hive not found');
+    }
+    await this.redis.invalidateDashboard(tenantId);
+    return { deleted: true };
+  }
+
+  private async requireApiary(
+    apiaryId: string,
+    tenantId: string,
+  ): Promise<void> {
+    const apiary = await this.prisma.apiary.findFirst({
+      where: { id: apiaryId, tenantId },
+      select: { id: true },
+    });
+    if (!apiary) {
+      throw new NotFoundException('Apiary not found');
+    }
+  }
+
+  private rethrowDuplicateCode(error: unknown): never {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      throw new ConflictException('Hive code is already in use in this tenant');
+    }
+    throw error;
+  }
+}

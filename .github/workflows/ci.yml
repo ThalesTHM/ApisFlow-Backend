@@ -1,0 +1,35 @@
+name: ci
+
+# Integração contínua: lint, testes e build em todo pull request.
+on:
+  pull_request:
+  push:
+    branches: [development]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: lint
+        run: npx eslint "{src,test}/**/*.ts"
+
+      - name: unit tests
+        run: npm test -- --ci
+
+      - name: build
+        run: npm run build
