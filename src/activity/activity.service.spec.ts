@@ -5,9 +5,9 @@ import { ActivityService } from './activity.service';
 
 describe('ActivityService', () => {
   const prismaMock = {
-    auditLog: { create: jest.fn(() => 'audit-query') },
-    notification: { create: jest.fn(() => 'notification-query') },
-    $transaction: jest.fn(),
+    auditLog: { create: jest.fn() },
+    notification: { create: jest.fn() },
+    tenantTransaction: jest.fn(),
   };
   const tenantContextMock = {
     requireTenantId: jest.fn(() => 'tenant-a'),
@@ -17,6 +17,9 @@ describe('ActivityService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prismaMock.tenantTransaction.mockImplementation(
+      (callback: (tx: typeof prismaMock) => unknown) => callback(prismaMock),
+    );
     service = new ActivityService(
       prismaMock as unknown as PrismaService,
       tenantContextMock as unknown as TenantContextService,
@@ -52,9 +55,6 @@ describe('ActivityService', () => {
         message: 'Your account was created',
       },
     });
-    expect(prismaMock.$transaction).toHaveBeenCalledWith([
-      'audit-query',
-      'notification-query',
-    ]);
+    expect(prismaMock.tenantTransaction).toHaveBeenCalledTimes(1);
   });
 });

@@ -34,7 +34,7 @@ describe('OrdersService order and inventory flow', () => {
       findFirstOrThrow: jest.fn(),
       updateMany: jest.fn(),
     },
-    $transaction: jest.fn(),
+    tenantTransaction: jest.fn(),
   };
   const tenantContextMock = {
     requireTenantId: jest.fn(() => 'tenant-a'),
@@ -48,7 +48,7 @@ describe('OrdersService order and inventory flow', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prismaMock.$transaction.mockImplementation(
+    prismaMock.tenantTransaction.mockImplementation(
       (callback: (transaction: typeof prismaMock) => unknown) =>
         Promise.resolve(callback(prismaMock)),
     );
@@ -148,9 +148,13 @@ describe('OrdersService order and inventory flow', () => {
       status: OrderStatus.CONFIRMED,
     });
 
-    expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-    });
+    expect(prismaMock.tenantTransaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      {
+        tenantId: 'tenant-a',
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      },
+    );
     expect(prismaMock.order.updateMany).toHaveBeenCalledWith({
       where: {
         id: 'order-a',
@@ -269,7 +273,7 @@ describe('OrdersService order and inventory flow', () => {
         clientVersion: 'test',
       },
     );
-    prismaMock.$transaction
+    prismaMock.tenantTransaction
       .mockRejectedValueOnce(conflict)
       .mockRejectedValueOnce(conflict)
       .mockResolvedValueOnce({
@@ -280,7 +284,7 @@ describe('OrdersService order and inventory flow', () => {
     await expect(
       service.updateStatus('order-a', { status: OrderStatus.CONFIRMED }),
     ).resolves.toMatchObject({ id: 'order-a' });
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(3);
+    expect(prismaMock.tenantTransaction).toHaveBeenCalledTimes(3);
   });
 
   it('returns a conflict when serialization keeps failing', async () => {
@@ -291,11 +295,11 @@ describe('OrdersService order and inventory flow', () => {
         clientVersion: 'test',
       },
     );
-    prismaMock.$transaction.mockRejectedValue(conflict);
+    prismaMock.tenantTransaction.mockRejectedValue(conflict);
 
     await expect(
       service.updateStatus('order-a', { status: OrderStatus.CONFIRMED }),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect(prismaMock.$transaction).toHaveBeenCalledTimes(5);
+    expect(prismaMock.tenantTransaction).toHaveBeenCalledTimes(5);
   });
 });

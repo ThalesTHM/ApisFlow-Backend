@@ -120,7 +120,7 @@ export class OrdersService {
     }
 
     const result = await this.withSerializableRetry(() =>
-      this.prisma.$transaction(
+      this.prisma.tenantTransaction(
         async (transaction) => {
           const order = await transaction.order.findFirst({
             where: { id, tenantId },
@@ -164,7 +164,10 @@ export class OrdersService {
             statusChanged: true,
           };
         },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          tenantId,
+        },
       ),
     );
 
