@@ -119,49 +119,53 @@ export class OrdersService {
       throw new BadRequestException('An order cannot return to pending');
     }
 
-    const result = await this.prisma.$transaction(
-      async (transaction) => {
-        const order = await transaction.order.findFirst({
-          where: { id, tenantId },
-          include: { items: true },
-        });
-        if (!order) {
-          throw new NotFoundException('Order not found');
-        }
-        if (order.status === dto.status) {
+    const result = await this.withSerializableRetry(() =>
+      this.prisma.$transaction(
+        async (transaction) => {
+          const order = await transaction.order.findFirst({
+            where: { id, tenantId },
+            include: { items: true },
+          });
+          if (!order) {
+            throw new NotFoundException('Order not found');
+          }
+          if (order.status === dto.status) {
+            return {
+              order: await transaction.order.findFirstOrThrow({
+                where: { id, tenantId },
+                include: orderDetailInclude,
+              }),
+              statusChanged: false,
+            };
+          }
+          if (order.status !== OrderStatus.PENDING) {
+            throw new ConflictException(
+              'A finalized order cannot change status',
+            );
+          }
+
+          const statusUpdate = await transaction.order.updateMany({
+            where: { id, tenantId, status: OrderStatus.PENDING },
+            data: { status: dto.status },
+          });
+          if (statusUpdate.count === 0) {
+            throw new ConflictException('Order status changed concurrently');
+          }
+
+          if (dto.status === OrderStatus.CONFIRMED) {
+            await this.deductInventory(transaction, tenantId, order.items);
+          }
+
           return {
             order: await transaction.order.findFirstOrThrow({
               where: { id, tenantId },
               include: orderDetailInclude,
             }),
-            statusChanged: false,
+            statusChanged: true,
           };
-        }
-        if (order.status !== OrderStatus.PENDING) {
-          throw new ConflictException('A finalized order cannot change status');
-        }
-
-        const statusUpdate = await transaction.order.updateMany({
-          where: { id, tenantId, status: OrderStatus.PENDING },
-          data: { status: dto.status },
-        });
-        if (statusUpdate.count === 0) {
-          throw new ConflictException('Order status changed concurrently');
-        }
-
-        if (dto.status === OrderStatus.CONFIRMED) {
-          await this.deductInventory(transaction, tenantId, order.items);
-        }
-
-        return {
-          order: await transaction.order.findFirstOrThrow({
-            where: { id, tenantId },
-            include: orderDetailInclude,
-          }),
-          statusChanged: true,
-        };
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
     );
 
     if (result.statusChanged) {
@@ -188,6 +192,32 @@ export class OrdersService {
       });
     }
     return result.order;
+  }
+
+  // Transações SERIALIZABLE concorrentes sobre o mesmo lote podem ser abortadas
+  // pelo PostgreSQL (Prisma P2034). O padrão é repetir a transação inteira algumas
+  // vezes com espera aleatória; se ainda assim falhar, devolve 409 em vez de 500.
+  private async withSerializableRetry<T>(run: () => Promise<T>): Promise<T> {
+    const maxAttempts = 5;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await run();
+      } catch (error) {
+        const isConflict =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2034';
+        if (!isConflict) {
+          throw error;
+        }
+        if (attempt >= maxAttempts) {
+          throw new ConflictException(
+            'Order could not be confirmed due to concurrent updates, try again',
+          );
+        }
+        const delayMs = 20 * 2 ** attempt + Math.floor(Math.random() * 30);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
   }
 
   private async deductInventory(
