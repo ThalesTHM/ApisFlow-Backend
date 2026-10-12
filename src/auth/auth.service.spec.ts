@@ -25,7 +25,7 @@ describe('AuthService', () => {
       create: jest.fn(),
       findFirst: jest.fn(),
     },
-    $transaction: jest.fn(),
+    tenantTransaction: jest.fn(),
   };
   const passwordMock = {
     hash: jest.fn(),
@@ -38,6 +38,10 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prismaMock.tenantTransaction.mockImplementation(
+      async (callback: (client: typeof prismaMock) => Promise<unknown>) =>
+        callback(prismaMock),
+    );
     service = new AuthService(
       prismaMock as unknown as PrismaService,
       passwordMock,
@@ -50,7 +54,7 @@ describe('AuthService', () => {
     tokenMock.issueAccessToken.mockResolvedValue('access-token');
     prismaMock.tenant.create.mockResolvedValue(tenant);
     prismaMock.user.create.mockResolvedValue(user);
-    prismaMock.$transaction.mockImplementation(
+    prismaMock.tenantTransaction.mockImplementation(
       async (callback: (client: typeof prismaMock) => Promise<unknown>) =>
         callback(prismaMock),
     );
@@ -64,11 +68,13 @@ describe('AuthService', () => {
     });
 
     expect(passwordMock.hash).toHaveBeenCalledWith('plain-password');
-    expect(prismaMock.tenant.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: { name: tenant.name, slug: tenant.slug },
-      }),
-    );
+    const tenantCreate = prismaMock.tenant.create.mock.calls[0] as unknown as [
+      { data: { id: string; name: string; slug: string } },
+    ];
+    expect(tenantCreate[0].data).toMatchObject({
+      name: tenant.name,
+      slug: tenant.slug,
+    });
     expect(prismaMock.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

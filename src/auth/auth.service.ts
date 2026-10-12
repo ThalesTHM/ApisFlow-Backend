@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   ConflictException,
   Injectable,
@@ -45,24 +46,29 @@ export class AuthService {
     const email = dto.email.toLowerCase();
 
     try {
-      const { tenant, user } = await this.prisma.$transaction(async (tx) => {
-        const tenant = await tx.tenant.create({
-          data: { name: dto.tenantName, slug: dto.tenantSlug },
-          select: { id: true, name: true, slug: true },
-        });
-        const user = await tx.user.create({
-          data: {
-            tenantId: tenant.id,
-            name: dto.name,
-            email,
-            passwordHash,
-            role: UserRole.ADMIN,
-          },
-          select: publicUserSelect,
-        });
+      // O id é gerado antes para que a transação já nasça com o tenant definido (RLS).
+      const tenantId = randomUUID();
+      const { tenant, user } = await this.prisma.tenantTransaction(
+        async (tx) => {
+          const tenant = await tx.tenant.create({
+            data: { id: tenantId, name: dto.tenantName, slug: dto.tenantSlug },
+            select: { id: true, name: true, slug: true },
+          });
+          const user = await tx.user.create({
+            data: {
+              tenantId: tenant.id,
+              name: dto.name,
+              email,
+              passwordHash,
+              role: UserRole.ADMIN,
+            },
+            select: publicUserSelect,
+          });
 
-        return { tenant, user };
-      });
+          return { tenant, user };
+        },
+        { tenantId },
+      );
 
       return {
         accessToken: await this.issueToken(user),
@@ -89,13 +95,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const userWithPassword = await this.prisma.user.findFirst({
-      where: {
-        tenantId: tenant.id,
-        email: dto.email.toLowerCase(),
-        isActive: true,
-      },
-    });
+    const userWithPassword = await this.prisma.tenantTransaction(
+      (tx) =>
+        tx.user.findFirst({
+          where: {
+            tenantId: tenant.id,
+            email: dto.email.toLowerCase(),
+            isActive: true,
+          },
+        }),
+      { tenantId: tenant.id },
+    );
     if (
       !userWithPassword ||
       !(await this.passwords.compare(
