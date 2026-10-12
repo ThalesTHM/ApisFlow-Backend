@@ -28,6 +28,8 @@ const statements = [
   `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${user}`,
   `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${user}`,
   `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${user}`,
+  // A aplicação não precisa alterar o histórico de migrações.
+  `REVOKE INSERT, UPDATE, DELETE ON _prisma_migrations FROM ${user}`,
   `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ${user}`,
 ];
 
