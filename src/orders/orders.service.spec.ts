@@ -260,4 +260,42 @@ describe('OrdersService order and inventory flow', () => {
     expect(redisMock.invalidateDashboard).not.toHaveBeenCalled();
     expect(redisMock.publishDomainEvent).not.toHaveBeenCalled();
   });
+
+  it('retries a confirmation aborted by a serialization conflict', async () => {
+    const conflict = new Prisma.PrismaClientKnownRequestError(
+      'write conflict',
+      {
+        code: 'P2034',
+        clientVersion: 'test',
+      },
+    );
+    prismaMock.$transaction
+      .mockRejectedValueOnce(conflict)
+      .mockRejectedValueOnce(conflict)
+      .mockResolvedValueOnce({
+        order: { id: 'order-a', status: OrderStatus.CONFIRMED },
+        statusChanged: false,
+      });
+
+    await expect(
+      service.updateStatus('order-a', { status: OrderStatus.CONFIRMED }),
+    ).resolves.toMatchObject({ id: 'order-a' });
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns a conflict when serialization keeps failing', async () => {
+    const conflict = new Prisma.PrismaClientKnownRequestError(
+      'write conflict',
+      {
+        code: 'P2034',
+        clientVersion: 'test',
+      },
+    );
+    prismaMock.$transaction.mockRejectedValue(conflict);
+
+    await expect(
+      service.updateStatus('order-a', { status: OrderStatus.CONFIRMED }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prismaMock.$transaction).toHaveBeenCalledTimes(5);
+  });
 });
