@@ -10,6 +10,7 @@ export interface TenantTransactionOptions {
 }
 
 type Executor = { $executeRaw: PrismaClient['$executeRaw'] };
+type ModelDelegate = Record<string, (args: unknown) => Promise<unknown>>;
 
 // Informa ao PostgreSQL o tenant da transação; as políticas de Row-Level Security
 // (migração row_level_security) só liberam as linhas desse tenant. O terceiro
@@ -53,26 +54,37 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
               await setTenant(tx, tenantId);
               return tenantContext.runInTransaction(tenantId, () => fn(tx));
             },
-            options.isolationLevel
-              ? { isolationLevel: options.isolationLevel }
-              : undefined,
+            {
+              isolationLevel: options.isolationLevel,
+              maxWait: 10000,
+              timeout: 15000,
+            },
           );
         },
       },
       query: {
         $allModels: {
-          // Cada operação de uma requisição autenticada roda numa transação curta
-          // que primeiro define o tenant da sessão no banco.
-          async $allOperations({ args, query }) {
+          // Cada operação de uma requisição autenticada roda numa transação
+          // interativa que primeiro define o tenant da sessão no banco e depois
+          // executa a própria operação no cliente da transação. Assim, cada
+          // operação ocupa uma única conexão do pool (uma versão anterior usava
+          // transação em lote e travava o pool sob consultas concorrentes).
+          async $allOperations({ model, operation, args, query }) {
             const tenantId = tenantContext.tenantId;
             if (!tenantId || tenantContext.inTransaction) {
               return query(args);
             }
-            const [, result] = await base.$transaction([
-              setTenant(base, tenantId),
-              query(args),
-            ]);
-            return result;
+            const delegate = model.charAt(0).toLowerCase() + model.slice(1);
+            return base.$transaction(
+              async (tx) => {
+                await setTenant(tx, tenantId);
+                const target = (tx as unknown as Record<string, ModelDelegate>)[
+                  delegate
+                ];
+                return target[operation](args);
+              },
+              { maxWait: 10000, timeout: 15000 },
+            );
           },
         },
       },
