@@ -4,7 +4,7 @@
 	build lint test test-e2e test-integration check prisma-generate migrate migrate-deploy seed studio clean
 
 help: ## Show available commands
-	@echo Honey Manager Backend
+	@echo ApisFlow Backend
 	@echo.
 	@echo   make setup           Prepare local development
 	@echo   make dev             Start PostgreSQL/Redis then NestJS in watch mode

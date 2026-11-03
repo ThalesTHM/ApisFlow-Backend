@@ -1,4 +1,4 @@
-# Honey Manager Backend
+# ApisFlow Backend
 
 Production-like MVP backend for a multi-tenant B2B beekeeping management SaaS. It is a NestJS modular monolith using PostgreSQL, Prisma, Redis, JWT, Jest, and OpenAPI.
 
