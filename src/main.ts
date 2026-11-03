@@ -18,7 +18,7 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const port = config.getOrThrow<number>('PORT');
   await app.listen(port);
-  logger.log(`Honey Manager API listening on port ${port}`, 'Bootstrap');
+  logger.log(`ApisFlow API listening on port ${port}`, 'Bootstrap');
 }
 
 void bootstrap();

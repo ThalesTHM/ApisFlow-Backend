@@ -25,7 +25,7 @@ export function configureApp(app: INestApplication): void {
 
   if (config.getOrThrow<boolean>('SWAGGER_ENABLED')) {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('Honey Manager API')
+      .setTitle('ApisFlow API')
       .setDescription(
         'Tenant-isolated API for apiaries, hives, production, honey inventory, and orders.',
       )
